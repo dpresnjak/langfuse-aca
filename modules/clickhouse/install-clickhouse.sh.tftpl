@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export DEBIAN_FRONTEND=noninteractive
+
+apt-get update -y
+apt-get install -y ca-certificates curl gnupg
+
+if ! command -v docker >/dev/null 2>&1; then
+  install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+  chmod a+r /etc/apt/keyrings/docker.gpg
+  echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+  apt-get update -y
+  apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+  systemctl enable --now docker
+fi
+
+MNT="/mnt/clickhouse"
+
+find_data_disk() {
+  for candidate in \
+    "${disk_device}" \
+    "/dev/disk/azure/scsi1/lun0" \
+    "/dev/disk/azure/scsi0/lun0"
+  do
+    if [ -b "$candidate" ]; then
+      readlink -f "$candidate"
+      return 0
+    fi
+  done
+
+  # Azure device paths can vary by image/VM generation. Pick the first non-OS disk.
+  lsblk -dn -o NAME,TYPE,MOUNTPOINT | awk '$2 == "disk" && $3 == "" { print "/dev/" $1; exit }'
+}
+
+DISK=""
+for _ in $(seq 1 120); do
+  DISK="$(find_data_disk || true)"
+  [ -n "$DISK" ] && [ -b "$DISK" ] && break
+  sleep 2
+done
+
+if [ -z "$DISK" ] || [ ! -b "$DISK" ]; then
+  echo "Data disk was not found" >&2
+  lsblk -f >&2 || true
+  ls -lah /dev/disk/azure || true
+  exit 1
+fi
+
+mkdir -p "$MNT"
+
+if ! blkid "$DISK" >/dev/null 2>&1; then
+  mkfs.ext4 -F "$DISK"
+fi
+
+UUID=$(blkid -s UUID -o value "$DISK")
+grep -q "$UUID" /etc/fstab || echo "UUID=$UUID $MNT ext4 defaults,nofail 0 2" >> /etc/fstab
+mount -a
+
+mkdir -p "$MNT/data" "$MNT/logs"
+
+docker rm -f clickhouse || true
+docker run -d --name clickhouse \
+  --restart unless-stopped \
+  -p 8123:8123 -p 9000:9000 \
+  -e CLICKHOUSE_DB=default \
+  -e CLICKHOUSE_USER='${clickhouse_user}' \
+  -e CLICKHOUSE_PASSWORD='${clickhouse_password}' \
+  -v "$MNT/data:/var/lib/clickhouse" \
+  -v "$MNT/logs:/var/log/clickhouse-server" \
+  clickhouse/clickhouse-server:latest
