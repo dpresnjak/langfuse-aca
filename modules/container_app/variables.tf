@@ -62,6 +62,37 @@ variable "database_url" {
   sensitive   = true
 }
 
+variable "use_postgres_container_app" {
+  type        = bool
+  description = "Deploy PostgreSQL as a Container App in this environment (POC)."
+  default     = false
+}
+
+variable "postgres_user" {
+  type        = string
+  description = "PostgreSQL username when use_postgres_container_app is true."
+  default     = "postgres"
+}
+
+variable "postgres_password" {
+  type        = string
+  description = "PostgreSQL password when use_postgres_container_app is true."
+  sensitive   = true
+  default     = null
+}
+
+variable "postgres_db_name" {
+  type        = string
+  description = "PostgreSQL database name when use_postgres_container_app is true."
+  default     = "postgres"
+}
+
+variable "postgres_image_tag" {
+  type        = string
+  description = "PostgreSQL image tag on docker.io."
+  default     = "16-alpine"
+}
+
 variable "salt" {
   type        = string
   description = "Langfuse SALT secret."
@@ -80,15 +111,27 @@ variable "nextauth_secret" {
   sensitive   = true
 }
 
+variable "use_clickhouse_container_app" {
+  type        = bool
+  description = "Deploy ClickHouse as a Container App in this environment (POC)."
+  default     = false
+}
+
 variable "clickhouse_password" {
   type        = string
   description = "ClickHouse password."
   sensitive   = true
 }
 
+variable "clickhouse_image_tag" {
+  type        = string
+  description = "ClickHouse server image tag on docker.io."
+  default     = "24.12"
+}
+
 variable "redis_password" {
   type        = string
-  description = "Redis access key/password."
+  description = "Redis password for the in-environment Redis Container App."
   sensitive   = true
 }
 
@@ -130,15 +173,15 @@ variable "clickhouse_user" {
   description = "ClickHouse username."
 }
 
-variable "redis_host" {
-  type        = string
-  description = "Redis hostname."
-}
-
-variable "redis_port" {
-  type        = number
-  description = "Redis TLS port."
-}
+# variable "redis_host" {
+#   type        = string
+#   description = "Redis hostname."
+# }
+#
+# variable "redis_port" {
+#   type        = number
+#   description = "Redis TLS port."
+# }
 
 variable "minio_root_user" {
   type        = string
@@ -149,6 +192,12 @@ variable "minio_image_tag" {
   type        = string
   description = "MinIO image tag on docker.io."
   default     = "latest"
+}
+
+variable "redis_image_tag" {
+  type        = string
+  description = "Redis image tag on docker.io."
+  default     = "7-alpine"
 }
 
 variable "enable_otel_collector" {

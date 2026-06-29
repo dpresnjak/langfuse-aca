@@ -53,6 +53,21 @@ output "minio_app_id" {
   description = "MinIO Container App resource ID."
 }
 
+output "postgres_app_id" {
+  value       = try(azurerm_container_app.postgres[0].id, null)
+  description = "PostgreSQL Container App resource ID (null when Flexible Server is used)."
+}
+
+output "clickhouse_app_id" {
+  value       = try(azurerm_container_app.clickhouse[0].id, null)
+  description = "ClickHouse Container App resource ID (null when VM is used)."
+}
+
+output "redis_app_id" {
+  value       = azurerm_container_app.redis.id
+  description = "Redis Container App resource ID."
+}
+
 output "otel_collector_app_id" {
   value       = try(azurerm_container_app.otel_collector[0].id, null)
   description = "OpenTelemetry Collector Container App resource ID (null if disabled)."

@@ -8,7 +8,6 @@ locals {
   )
 
   postgres_location   = coalesce(var.postgres_location, var.location)
-  redis_location      = coalesce(var.redis_location, var.location)
   clickhouse_location = coalesce(var.clickhouse_location, var.location)
 
   storage_account_name = (
@@ -22,21 +21,39 @@ locals {
     ? azurerm_storage_account.minio[0].primary_access_key
     : data.azurerm_storage_account.existing[0].primary_access_key
   )
+
+  database_url = (
+    var.use_postgres_container_app
+    ? "postgresql://${var.postgres_user}:${urlencode(random_password.postgres.result)}@postgres:5432/${var.postgres_db_name}?sslmode=disable"
+    : "postgresql://${var.postgres_user}:${urlencode(random_password.postgres.result)}@${module.psql[0].fqdn}:5432/${module.psql[0].database_name}?sslmode=require"
+  )
+
+  clickhouse_url = (
+    var.use_clickhouse_container_app
+    ? "http://clickhouse:8123"
+    : "http://${module.networking.clickhouse_private_ip}:8123"
+  )
+
+  clickhouse_migration_url = (
+    var.use_clickhouse_container_app
+    ? "clickhouse://${var.clickhouse_user}:${urlencode(random_password.clickhouse.result)}@clickhouse:9000"
+    : "clickhouse://${var.clickhouse_user}:${urlencode(random_password.clickhouse.result)}@${module.networking.clickhouse_private_ip}:9000"
+  )
 }
 
-############
-## Redis. ##
-############
-module "redis" {
-  source = "./modules/redis"
-
-  name_prefix         = var.name_prefix
-  location            = local.redis_location
-  resource_group_name = var.resource_group_name
-  sku_name            = var.redis_sku_name
-  capacity            = var.redis_capacity
-  tags                = local.tags
-}
+# ############
+# ## Redis. ##
+# ############
+# module "redis" {
+#   source = "./modules/redis"
+#
+#   name_prefix         = var.name_prefix
+#   location            = local.redis_location
+#   resource_group_name = var.resource_group_name
+#   sku_name            = var.redis_sku_name
+#   capacity            = var.redis_capacity
+#   tags                = local.tags
+# }
 
 #################  
 ## Networking. ##
@@ -48,6 +65,8 @@ module "networking" {
   location            = var.location
   resource_group_name = var.resource_group_name
 
+  create_vnet              = var.create_vnet
+  vnet_address_space       = var.vnet_address_space
   vnet_name                = var.vnet_name
   vnet_resource_group_name = var.vnet_resource_group_name
   container_apps_subnet_id   = var.container_apps_infrastructure_subnet_id
@@ -63,15 +82,18 @@ module "networking" {
   clickhouse_vm_subnet_cidr = var.clickhouse_vm_subnet_cidr
 
   container_apps_nat_gateway_enabled = var.enable_container_apps_nat_gateway
+  enable_postgres_flexible_server    = !var.use_postgres_container_app
+  enable_clickhouse_vm               = !var.use_clickhouse_container_app
 
-  redis_cache_id = module.redis.id
-  tags           = local.tags
+  # redis_cache_id = module.redis.id
+  tags = local.tags
 }
 
 #################
 ## PostgreSQL. ##
 #################
 module "psql" {
+  count  = var.use_postgres_container_app ? 0 : 1
   source = "./modules/psql"
 
   name_prefix            = var.name_prefix
@@ -95,6 +117,7 @@ module "psql" {
 ## ClickHouse. ##
 #################
 module "clickhouse" {
+  count  = var.use_clickhouse_container_app ? 0 : 1
   source = "./modules/clickhouse"
 
   name_prefix          = var.name_prefix
@@ -127,13 +150,20 @@ module "container_app" {
   storage_share_name   = azurerm_storage_share.minio.name
   storage_access_key   = local.storage_access_key
 
-  database_url             = "postgresql://${var.postgres_user}:${urlencode(random_password.postgres.result)}@${module.psql.fqdn}:5432/${module.psql.database_name}?sslmode=require"
-  salt                     = random_bytes.salt.base64
-  encryption_key           = random_bytes.encryption_key.hex
-  nextauth_secret          = random_bytes.nextauth_secret.base64
-  clickhouse_password      = random_password.clickhouse.result
-  clickhouse_migration_url = "clickhouse://${var.clickhouse_user}:${urlencode(random_password.clickhouse.result)}@${module.networking.clickhouse_private_ip}:9000"
-  redis_password           = module.redis.primary_access_key
+  database_url                  = local.database_url
+  use_postgres_container_app    = var.use_postgres_container_app
+  postgres_user                 = var.postgres_user
+  postgres_password             = random_password.postgres.result
+  postgres_db_name              = var.postgres_db_name
+  postgres_image_tag            = var.postgres_image_tag
+  use_clickhouse_container_app  = var.use_clickhouse_container_app
+  clickhouse_image_tag          = var.clickhouse_image_tag
+  salt                          = random_bytes.salt.base64
+  encryption_key                = random_bytes.encryption_key.hex
+  nextauth_secret               = random_bytes.nextauth_secret.base64
+  clickhouse_password           = random_password.clickhouse.result
+  clickhouse_migration_url      = local.clickhouse_migration_url
+  redis_password                = random_password.redis.result
   minio_password           = random_password.minio.result
 
   nextauth_url = (
@@ -143,20 +173,19 @@ module "container_app" {
   )
   langfuse_image_tag = var.langfuse_image_tag
   telemetry_enabled  = var.telemetry_enabled
-  clickhouse_url     = "http://${module.networking.clickhouse_private_ip}:8123"
+  clickhouse_url     = local.clickhouse_url
   clickhouse_user    = var.clickhouse_user
-  redis_host         = module.redis.hostname
-  redis_port         = module.redis.ssl_port
+  # redis_host         = module.redis.hostname
+  # redis_port         = module.redis.ssl_port
   minio_root_user    = var.minio_root_user
 
   minio_image_tag = var.minio_image_tag
+  redis_image_tag = var.redis_image_tag
 
-  enable_otel_collector      = var.enable_otel_collector
-  otel_collector_image_tag   = var.otel_collector_image_tag
+  enable_otel_collector    = var.enable_otel_collector
+  otel_collector_image_tag = var.otel_collector_image_tag
 
   depends_on = [
-    module.psql,
-    module.clickhouse,
     module.networking,
     azurerm_storage_share.minio,
   ]

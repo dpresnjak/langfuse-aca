@@ -13,6 +13,11 @@ resource "random_password" "minio" {
   special = false
 }
 
+resource "random_password" "redis" {
+  length  = 32
+  special = false
+}
+
 resource "random_bytes" "salt" {
   length = 32
 }

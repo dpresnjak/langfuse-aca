@@ -20,7 +20,25 @@ variable "vnet_name" {
 
 variable "vnet_resource_group_name" {
   type        = string
-  description = "Resource group containing the existing VNet."
+  description = "Resource group containing the VNet (existing or created)."
+}
+
+variable "create_vnet" {
+  type        = bool
+  description = "Create a new VNet in var.location. When false, use existing vnet_name in vnet_resource_group_name."
+  default     = false
+}
+
+variable "vnet_address_space" {
+  type        = list(string)
+  description = "Address space when create_vnet is true."
+  default     = ["192.168.0.0/16"]
+}
+
+variable "enable_postgres_flexible_server" {
+  type        = bool
+  description = "Create PostgreSQL Flexible Server subnet and private DNS zone. Set false when PostgreSQL runs as a Container App."
+  default     = true
 }
 
 variable "postgres_subnet_id" {
@@ -62,6 +80,12 @@ variable "container_apps_subnet_cidr" {
 variable "container_apps_nat_gateway_enabled" {
   type        = bool
   description = "Attach a Standard NAT gateway to the Container Apps subnet so workloads can reach the internet (e.g. Docker Hub) while the environment stays internal-only."
+  default     = false
+}
+
+variable "enable_clickhouse_vm" {
+  type        = bool
+  description = "Create ClickHouse VM subnet, NIC, and NSG. Set false when ClickHouse runs as a Container App."
   default     = true
 }
 
@@ -83,10 +107,10 @@ variable "application_gateway_subnet_id" {
   default     = null
 }
 
-variable "redis_cache_id" {
-  type        = string
-  description = "Azure Cache for Redis resource ID used to create a private endpoint."
-}
+# variable "redis_cache_id" {
+#   type        = string
+#   description = "Azure Cache for Redis resource ID used to create a private endpoint."
+# }
 
 variable "tags" {
   type        = map(string)

@@ -16,7 +16,7 @@ variable "log_analytics_workspace_name" {
 
 variable "location" {
   type        = string
-  description = "Primary Azure region."
+  description = "Primary Azure region for all deployment resources."
   default     = "eastus2"
 }
 
@@ -34,12 +34,24 @@ variable "tags" {
 
 variable "vnet_name" {
   type        = string
-  description = "Existing VNet name."
+  description = "VNet name (existing or to create when create_vnet is true)."
 }
 
 variable "vnet_resource_group_name" {
   type        = string
-  description = "Resource group containing the existing VNet."
+  description = "Resource group containing the VNet."
+}
+
+variable "create_vnet" {
+  type        = bool
+  description = "Create a new VNet in location instead of using an existing one."
+  default     = false
+}
+
+variable "vnet_address_space" {
+  type        = list(string)
+  description = "Address space for the VNet when create_vnet is true."
+  default     = ["192.168.0.0/16"]
 }
 
 variable "container_apps_infrastructure_subnet_id" {
@@ -107,16 +119,22 @@ variable "postgres_location" {
   default     = null
 }
 
-variable "redis_location" {
-  type        = string
-  description = "Optional region override for Azure Cache for Redis."
-  default     = null
-}
+# variable "redis_location" {
+#   type        = string
+#   description = "Optional region override for Azure Cache for Redis."
+#   default     = null
+# }
 
 variable "clickhouse_location" {
   type        = string
   description = "Optional region override for the ClickHouse VM."
   default     = null
+}
+
+variable "use_postgres_container_app" {
+  type        = bool
+  description = "When true, run PostgreSQL as a Container App in the CAE (POC). When false, deploy Azure Database for PostgreSQL Flexible Server."
+  default     = false
 }
 
 variable "postgres_version" {
@@ -149,16 +167,22 @@ variable "postgres_storage_mb" {
   default     = 32768
 }
 
-variable "redis_sku_name" {
-  type        = string
-  description = "Azure Cache for Redis SKU."
-  default     = "Basic"
-}
+# variable "redis_sku_name" {
+#   type        = string
+#   description = "Azure Cache for Redis SKU."
+#   default     = "Basic"
+# }
+#
+# variable "redis_capacity" {
+#   type        = number
+#   description = "Azure Cache for Redis capacity."
+#   default     = 1
+# }
 
-variable "redis_capacity" {
-  type        = number
-  description = "Azure Cache for Redis capacity."
-  default     = 1
+variable "use_clickhouse_container_app" {
+  type        = bool
+  description = "When true, run ClickHouse as a Container App in the CAE (POC). When false, deploy a Linux VM."
+  default     = false
 }
 
 variable "clickhouse_user" {
@@ -167,10 +191,16 @@ variable "clickhouse_user" {
   default     = "clickhouse"
 }
 
+variable "clickhouse_image_tag" {
+  type        = string
+  description = "ClickHouse server image tag on docker.io when use_clickhouse_container_app is true."
+  default     = "24.12"
+}
+
 variable "clickhouse_vm_size" {
   type        = string
-  description = "ClickHouse VM size."
-  default     = "Standard_B2s"
+  description = "ClickHouse VM size. Use a SKU with capacity in your region (e.g. Standard_D2s_v3 in uksouth)."
+  default     = "Standard_D2s_v3"
 }
 
 variable "clickhouse_disk_size_gb" {
@@ -237,4 +267,16 @@ variable "minio_image_tag" {
   type        = string
   description = "MinIO image tag on docker.io (e.g. latest)."
   default     = "latest"
+}
+
+variable "redis_image_tag" {
+  type        = string
+  description = "Redis image tag on docker.io (e.g. 7-alpine)."
+  default     = "7-alpine"
+}
+
+variable "postgres_image_tag" {
+  type        = string
+  description = "PostgreSQL image tag on docker.io when use_postgres_container_app is true (e.g. 16-alpine)."
+  default     = "16-alpine"
 }

@@ -9,8 +9,8 @@ resource "azurerm_storage_account" "minio" {
 }
 
 resource "azurerm_storage_share" "minio" {
-  name                 = "minio-data"
-  storage_account_name = local.storage_account_name
-  quota                = var.minio_file_share_quota_gb
+  name               = "minio-data"
+  storage_account_id = local.minio_storage_account_id
+  quota              = var.minio_file_share_quota_gb
 }
 

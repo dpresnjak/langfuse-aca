@@ -63,12 +63,14 @@ locals {
   minio_external_url = "https://${local.minio_host}"
 
   minio_image           = "docker.io/minio/minio:${var.minio_image_tag}"
+  postgres_image        = "docker.io/postgres:${var.postgres_image_tag}"
+  clickhouse_image      = "docker.io/clickhouse/clickhouse-server:${var.clickhouse_image_tag}"
+  redis_image           = "docker.io/redis:${var.redis_image_tag}"
   langfuse_web_image    = "docker.io/langfuse/langfuse:${var.langfuse_image_tag}"
   langfuse_worker_image = "docker.io/langfuse/langfuse-worker:${var.langfuse_image_tag}"
 
-  # Azure Cache for Redis: TLS via rediss://; password must be URL-encoded (keys often contain +/=).
-  # Langfuse reads REDIS_TLS_*_PATH, not REDIS_TLS_CA — do not set bogus /certs paths.
-  redis_connection_string = "rediss://:${urlencode(var.redis_password)}@${var.redis_host}:${var.redis_port}"
+  # In-environment Redis (Container App); plain redis:// on the CAE internal network.
+  redis_connection_string = "redis://:${urlencode(var.redis_password)}@redis:6379"
 
   langfuse_otel_env = var.enable_otel_collector ? [
     { name = "OTEL_EXPORTER_OTLP_ENDPOINT", value = "https://otel-collector.${module.environment.default_domain}" },
@@ -218,6 +220,130 @@ resource "azurerm_container_app" "minio" {
   }
 }
 
+resource "azurerm_container_app" "postgres" {
+  count = var.use_postgres_container_app ? 1 : 0
+
+  name                         = "postgres"
+  container_app_environment_id = module.environment.id
+  resource_group_name          = var.resource_group_name
+  revision_mode                = "Single"
+  tags                         = var.tags
+
+  depends_on = [azurerm_container_app.minio]
+
+  secret {
+    name  = "postgres-password"
+    value = var.postgres_password
+  }
+
+  template {
+    min_replicas = 1
+    max_replicas = 1
+
+    container {
+      name   = "postgres"
+      image  = local.postgres_image
+      cpu    = 0.5
+      memory = "1.0Gi"
+
+      env {
+        name  = "POSTGRES_USER"
+        value = var.postgres_user
+      }
+      env {
+        name        = "POSTGRES_PASSWORD"
+        secret_name = "postgres-password"
+      }
+      env {
+        name  = "POSTGRES_DB"
+        value = var.postgres_db_name
+      }
+    }
+  }
+}
+
+resource "azurerm_container_app" "clickhouse" {
+  count = var.use_clickhouse_container_app ? 1 : 0
+
+  name                         = "clickhouse"
+  container_app_environment_id = module.environment.id
+  resource_group_name          = var.resource_group_name
+  revision_mode                = "Single"
+  tags                         = var.tags
+
+  depends_on = [
+    azurerm_container_app.minio,
+    azurerm_container_app.postgres,
+  ]
+
+  secret {
+    name  = "clickhouse-password"
+    value = var.clickhouse_password
+  }
+
+  template {
+    min_replicas = 1
+    max_replicas = 1
+
+    container {
+      name   = "clickhouse"
+      image  = local.clickhouse_image
+      cpu    = 1.0
+      memory = "2.0Gi"
+
+      env {
+        name  = "CLICKHOUSE_USER"
+        value = var.clickhouse_user
+      }
+      env {
+        name        = "CLICKHOUSE_PASSWORD"
+        secret_name = "clickhouse-password"
+      }
+      env {
+        name  = "CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT"
+        value = "1"
+      }
+    }
+  }
+}
+
+resource "azurerm_container_app" "redis" {
+  name                         = "redis"
+  container_app_environment_id = module.environment.id
+  resource_group_name          = var.resource_group_name
+  revision_mode                = "Single"
+  tags                         = var.tags
+
+  depends_on = [
+    azurerm_container_app.minio,
+    azurerm_container_app.postgres,
+    azurerm_container_app.clickhouse,
+  ]
+
+  secret {
+    name  = "redis-password"
+    value = var.redis_password
+  }
+
+  template {
+    min_replicas = 1
+    max_replicas = 1
+
+    container {
+      name    = "redis"
+      image   = local.redis_image
+      cpu     = 0.25
+      memory  = "0.5Gi"
+      command = ["sh", "-c", "exec redis-server --requirepass \"$REDIS_PASSWORD\""]
+
+      env {
+        name        = "REDIS_PASSWORD"
+        secret_name = "redis-password"
+      }
+    }
+  }
+}
+
 resource "azurerm_container_app" "otel_collector" {
   count = var.enable_otel_collector ? 1 : 0
 
@@ -227,7 +353,7 @@ resource "azurerm_container_app" "otel_collector" {
   revision_mode                = "Single"
   tags                         = var.tags
 
-  depends_on = [azurerm_container_app.minio]
+  depends_on = [azurerm_container_app.redis]
 
   secret {
     name  = "otel-collector-config"
@@ -272,7 +398,7 @@ resource "azurerm_container_app" "langfuse_web" {
   revision_mode                = "Single"
   tags                         = var.tags
 
-  depends_on = [azurerm_container_app.minio]
+  depends_on = [azurerm_container_app.redis]
 
   secret {
     name  = "database-url"
@@ -350,7 +476,7 @@ resource "azurerm_container_app" "langfuse_worker" {
   revision_mode                = "Single"
   tags                         = var.tags
 
-  depends_on = [azurerm_container_app.minio]
+  depends_on = [azurerm_container_app.redis]
 
   secret {
     name  = "database-url"

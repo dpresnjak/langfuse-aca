@@ -1,5 +1,5 @@
 output "virtual_network_id" {
-  value       = data.azurerm_virtual_network.this.id
+  value       = local.virtual_network_id
   description = "Virtual network resource ID."
 }
 
@@ -19,23 +19,23 @@ output "postgres_subnet_id" {
 }
 
 output "postgres_private_dns_zone_id" {
-  value       = azurerm_private_dns_zone.postgres.id
-  description = "Private DNS zone ID for PostgreSQL Flexible Server."
+  value       = try(azurerm_private_dns_zone.postgres[0].id, null)
+  description = "Private DNS zone ID for PostgreSQL Flexible Server (null when disabled)."
 }
 
-output "redis_private_endpoint_id" {
-  value       = azurerm_private_endpoint.redis.id
-  description = "Private endpoint ID for Azure Cache for Redis."
-}
+# output "redis_private_endpoint_id" {
+#   value       = azurerm_private_endpoint.redis.id
+#   description = "Private endpoint ID for Azure Cache for Redis."
+# }
 
 output "clickhouse_network_interface_id" {
-  value       = azurerm_network_interface.clickhouse.id
-  description = "NIC ID for the ClickHouse VM."
+  value       = try(azurerm_network_interface.clickhouse[0].id, null)
+  description = "NIC ID for the ClickHouse VM (null when VM is disabled)."
 }
 
 output "clickhouse_private_ip" {
-  value       = azurerm_network_interface.clickhouse.private_ip_address
-  description = "Private IP assigned to the ClickHouse VM NIC."
+  value       = try(azurerm_network_interface.clickhouse[0].private_ip_address, null)
+  description = "Private IP assigned to the ClickHouse VM NIC (null when VM is disabled)."
 }
 
 output "application_gateway_subnet_id" {
