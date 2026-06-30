@@ -19,7 +19,7 @@ This repo is designed to integrate with a **centralized Application Gateway** th
 
 ## High-level architecture
 
-```mermaid
+```
 flowchart TB
   subgraph landingZoneVNet[LandingZoneVNet]
     subgraph acaEnv[ContainerAppsEnvironment(InternalILB)]
